@@ -2,19 +2,14 @@ package zed.rainxch.githubstore.feature.home.data.repository
 
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -24,16 +19,18 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
-import zed.rainxch.githubstore.core.domain.model.GithubRepoSummary
-import zed.rainxch.githubstore.feature.home.domain.repository.HomeRepository
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerialName
-import zed.rainxch.githubstore.core.domain.model.GithubUser
+import zed.rainxch.githubstore.core.domain.model.GithubRepoSummary
 import zed.rainxch.githubstore.feature.home.data.model.GithubRepoNetworkModel
 import zed.rainxch.githubstore.feature.home.data.model.GithubRepoSearchResponse
 import zed.rainxch.githubstore.feature.home.data.model.toSummary
+import zed.rainxch.githubstore.feature.home.domain.repository.HomeRepository
 import zed.rainxch.githubstore.feature.home.domain.repository.PaginatedRepos
-import kotlin.collections.filterNotNull
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 
 class HomeRepositoryImpl(
     private val githubNetworkClient: HttpClient,
@@ -41,32 +38,55 @@ class HomeRepositoryImpl(
 ) : HomeRepository {
 
     override fun getTrendingRepositories(page: Int): Flow<PaginatedRepos> =
-        searchReposWithInstallersFlow("stars:>500", "stars", "desc", page)
+        searchReposWithInstallersFlow(
+            baseQuery = "stars:>500 archived:false",
+            sort = "stars",
+            order = "desc",
+            startPage = page
+        )
 
     override fun getLatestUpdated(page: Int): Flow<PaginatedRepos> =
-        searchReposWithInstallersFlow("stars:>50", "updated", "desc", page)
+        searchReposWithInstallersFlow(
+            baseQuery = "stars:>50 archived:false",
+            sort = "updated",
+            order = "desc",
+            startPage = page
+        )
 
-    override fun getNew(page: Int): Flow<PaginatedRepos> =
-        searchReposWithInstallersFlow("stars:>10", "created", "desc", page)
+    @OptIn(ExperimentalTime::class)
+    override fun getNew(page: Int): Flow<PaginatedRepos> {
+        val sixMonthsAgo = Clock.System.now()
+            .minus(30.days)
+            .toLocalDateTime(TimeZone.UTC)
+            .date
+
+        return searchReposWithInstallersFlow(
+            baseQuery = "stars:>5 archived:false created:>=$sixMonthsAgo",
+            sort = "created",
+            order = "desc",
+            startPage = page
+        )
+    }
 
     private fun searchReposWithInstallersFlow(
         baseQuery: String,
         sort: String,
         order: String,
         startPage: Int,
-        desiredCount: Int = 30
+        desiredCount: Int = 10
     ): Flow<PaginatedRepos> = flow {
         val results = mutableListOf<GithubRepoSummary>()
-        var page = startPage
+        var currentApiPage = startPage
         val perPage = 100
         val semaphore = Semaphore(25)
-        val maxPagesToFetch = 3
+        val maxPagesToFetch = 5 // Increased from 3 to search deeper
+        var pagesFetchedCount = 0
+        var lastEmittedCount = 0
 
         val query = buildSimplifiedQuery(baseQuery)
-        Logger.d { "GitHub Search Query: $query, starting page: $startPage" }
+        Logger.d { "Query: $query | Sort: $sort | Page: $startPage" }
 
-        var pagesFetched = 0
-        while (results.size < desiredCount && pagesFetched < maxPagesToFetch) {
+        while (results.size < desiredCount && pagesFetchedCount < maxPagesToFetch) {
             currentCoroutineContext().ensureActive()
 
             try {
@@ -76,12 +96,15 @@ class HomeRepositoryImpl(
                         parameter("sort", sort)
                         parameter("order", order)
                         parameter("per_page", perPage)
-                        parameter("page", page)
+                        parameter("page", currentApiPage)
                     }.body()
 
-                Logger.d { "Page $page: Got ${response.items.size} repos from search" }
+                Logger.d { "API Page $currentApiPage: Got ${response.items.size} repos" }
 
-                if (response.items.isEmpty()) break
+                if (response.items.isEmpty()) {
+                    Logger.d { "No more items from API, breaking" }
+                    break
+                }
 
                 val candidates = response.items
                     .map { repo -> repo to calculatePlatformScore(repo) }
@@ -96,7 +119,7 @@ class HomeRepositoryImpl(
                     val deferredResults = candidates.map { repo ->
                         async {
                             semaphore.withPermit {
-                                withTimeoutOrNull(3000) {
+                                withTimeoutOrNull(5000) {
                                     checkRepoHasInstallers(repo)
                                 }
                             }
@@ -104,58 +127,86 @@ class HomeRepositoryImpl(
                     }
 
                     for (deferred in deferredResults) {
+                        currentCoroutineContext().ensureActive()
+
                         val result = deferred.await()
                         if (result != null) {
                             results.add(result)
+                            Logger.d { "Found installer repo: ${result.fullName} (${results.size}/$desiredCount)" }
 
-                            if (results.size % 5 == 0 || results.size >= desiredCount) {
-                                emit(
-                                    PaginatedRepos(
-                                        repos = results.toList(),
-                                        hasMore = results.size < desiredCount
+                            // Emit every 3 repos or when reaching desired count
+                            if (results.size % 3 == 0 || results.size >= desiredCount) {
+                                val newItems = results.subList(lastEmittedCount, results.size)
+
+                                if (newItems.isNotEmpty()) {
+                                    emit(
+                                        PaginatedRepos(
+                                            repos = newItems.toList(),
+                                            hasMore = true,
+                                            // Important: advance to the NEXT page for subsequent loads
+                                            nextPageIndex = currentApiPage + 1
+                                        )
                                     )
-                                )
-                                Logger.d { "Emitted: ${results.size} repos so far" }
+                                    Logger.d { "Emitted ${newItems.size} repos (total: ${results.size})" }
+                                    lastEmittedCount = results.size
+                                }
                             }
 
                             if (results.size >= desiredCount) {
+                                Logger.d { "Reached desired count, breaking" }
                                 break
                             }
                         }
                     }
                 }
 
-                if (results.size >= desiredCount || response.items.size < perPage) break
-                page++
-                pagesFetched++
-            } catch (e: Exception) {
-                if (e is CancellationException) {
-                    throw e
+                if (results.size >= desiredCount || response.items.size < perPage) {
+                    Logger.d { "Breaking: results=${results.size}, response size=${response.items.size}" }
+                    break
                 }
 
-                Logger.e { "Error in search: ${e.message}" }
+                currentApiPage++
+                pagesFetchedCount++
+
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Logger.e { "Search failed: ${e.message}" }
                 e.printStackTrace()
                 break
             }
         }
 
-        if (results.isNotEmpty()) {
+        // Final emission
+        if (results.size > lastEmittedCount) {
+            val finalBatch = results.subList(lastEmittedCount, results.size)
+            val finalHasMore = pagesFetchedCount < maxPagesToFetch && results.size >= desiredCount
             emit(
                 PaginatedRepos(
-                    repos = results.take(desiredCount),
-                    hasMore = pagesFetched < maxPagesToFetch && results.size >= desiredCount
+                    repos = finalBatch.toList(),
+                    hasMore = finalHasMore,
+                    // If there are potentially more results, move to the next API page
+                    nextPageIndex = if (finalHasMore) currentApiPage + 1 else currentApiPage
                 )
             )
+            Logger.d { "Final emit: ${finalBatch.size} repos (total: ${results.size})" }
+        } else if (results.isEmpty()) {
+            // Emit empty result with hasMore=false so UI knows to show "no results"
+            emit(
+                PaginatedRepos(
+                    repos = emptyList(),
+                    hasMore = false,
+                    nextPageIndex = currentApiPage
+                )
+            )
+            Logger.d { "No results found" }
         }
-
-        Logger.d { "Finished: ${results.size} total repos" }
     }.flowOn(Dispatchers.IO)
 
     private fun buildSimplifiedQuery(baseQuery: String): String {
         val topic = when (platform.type) {
             PlatformType.ANDROID -> "android"
             PlatformType.WINDOWS -> "desktop"
-            PlatformType.MACOS -> "desktop"
+            PlatformType.MACOS -> "macos"
             PlatformType.LINUX -> "linux"
         }
 
@@ -177,9 +228,9 @@ class HomeRepositoryImpl(
             }
 
             PlatformType.WINDOWS, PlatformType.MACOS, PlatformType.LINUX -> {
-                if (topics.any { it in setOf("desktop", "electron", "app", "gui") }) score += 10
+                if (topics.any { it in setOf("desktop", "electron", "app", "gui", "compose-desktop") }) score += 10
                 if (topics.contains("cross-platform") || topics.contains("multiplatform")) score += 8
-                if (language in setOf("kotlin", "c++", "rust", "c#", "swift")) score += 5
+                if (language in setOf("kotlin", "c++", "rust", "c#", "swift", "dart")) score += 5
                 if (desc.contains("desktop") || desc.contains("application")) score += 3
             }
         }
@@ -203,19 +254,13 @@ class HomeRepositoryImpl(
                 val name = asset.name.lowercase()
                 when (platform.type) {
                     PlatformType.ANDROID -> name.endsWith(".apk")
-                    PlatformType.WINDOWS -> name.endsWith(".msi") || name.endsWith(".exe") || name.contains(
-                        ".exe"
-                    )
-
+                    PlatformType.WINDOWS -> name.endsWith(".msi") || name.endsWith(".exe") || name.contains(".exe")
                     PlatformType.MACOS -> name.endsWith(".dmg") || name.endsWith(".pkg")
-                    PlatformType.LINUX -> name.endsWith(".appimage") || name.endsWith(".deb") || name.endsWith(
-                        ".rpm"
-                    )
+                    PlatformType.LINUX -> name.endsWith(".appimage") || name.endsWith(".deb") || name.endsWith(".rpm")
                 }
             }
 
             if (relevantAssets.isNotEmpty()) {
-                Logger.d { "${repo.fullName}: Found installers" }
                 repo.toSummary()
             } else {
                 null

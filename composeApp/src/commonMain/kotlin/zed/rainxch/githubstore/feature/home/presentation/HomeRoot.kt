@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,56 +21,67 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.touchlab.kermit.Logger
 import githubstore.composeapp.generated.resources.Res
 import githubstore.composeapp.generated.resources.app_icon
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
-import zed.rainxch.githubstore.core.domain.model.GithubRepoSummary
 import zed.rainxch.githubstore.core.presentation.theme.GithubStoreTheme
 import zed.rainxch.githubstore.feature.home.presentation.components.HomeFilterChips
-import zed.rainxch.githubstore.feature.home.presentation.components.RepositoryCard
+import zed.rainxch.githubstore.core.presentation.components.RepositoryCard
 import zed.rainxch.githubstore.feature.home.presentation.model.HomeCategory
 
 @Composable
 fun HomeRoot(
+    onNavigateToSearch: () -> Unit,
     viewModel: HomeViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     HomeScreen(
         state = state,
-        onAction = viewModel::onAction
+        onAction = { action ->
+            when (action) {
+                HomeAction.OnSearchClick -> {
+                    onNavigateToSearch()
+                }
+
+                is HomeAction.OnRepositoryClick -> {
+                    TODO()
+                }
+
+                else -> {
+                    viewModel.onAction(action)
+                }
+            }
+        }
     )
 }
 
@@ -85,18 +95,26 @@ fun HomeScreen(
 
     val shouldLoadMore by remember {
         derivedStateOf {
-            val totalItems = listState.layoutInfo.totalItemsCount
-            val lastVisibleItemIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
 
-            val endReached = lastVisibleItemIndex >= (totalItems - 3)
-
-            endReached && state.hasMorePages && !state.isLoadingMore && !state.isLoading
+            // Trigger when near bottom (within 5 items)
+            totalItems > 0 &&
+                    lastVisibleItem != null &&
+                    lastVisibleItem.index >= (totalItems - 5) &&
+                    !state.isLoadingMore &&
+                    !state.isLoading &&
+                    state.hasMorePages
         }
     }
 
+    val currentOnAction by rememberUpdatedState(onAction)
+
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
-            onAction(HomeAction.LoadMore)
+            Logger.d { "UI triggering LoadMore" }
+            currentOnAction(HomeAction.LoadMore)
         }
     }
 
@@ -124,7 +142,7 @@ fun HomeScreen(
                 actions = {
                     IconButton(
                         onClick = {
-
+                            onAction(HomeAction.OnSearchClick)
                         },
                         colors = IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -146,7 +164,7 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 8.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -207,7 +225,7 @@ fun HomeScreen(
                 if (state.repos.isNotEmpty()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         state = listState
                     ) {
@@ -215,35 +233,34 @@ fun HomeScreen(
                             RepositoryCard(
                                 repository = repository,
                                 onClick = {
-
+                                    onAction(HomeAction.OnRepositoryClick(repository))
                                 }
                             )
                         }
 
-                        if (state.hasMorePages) {
-                            item {
+                        if (state.isLoadingMore) {
+                            item(key = "loading_indicator") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(16.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (state.isLoadingMore) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
-
-                                            Spacer(modifier = Modifier.width(8.dp))
-
-                                            Text("Loading more...")
-                                        }
+                                    Row(
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Loading more...")
                                     }
                                 }
                             }
-                        } else {
-                            item {
+                        }
+
+                        // End message
+                        if (!state.hasMorePages && !state.isLoadingMore) {
+                            item(key = "end_message") {
                                 Text(
                                     text = "No more repositories",
                                     modifier = Modifier

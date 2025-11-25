@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -22,7 +23,7 @@ class HomeViewModel(
 
     private var hasLoadedInitialData = false
     private var currentJob: Job? = null
-    private var currentPage = 1
+    private var nextPageIndex = 1
 
     private val _state = MutableStateFlow(HomeState())
     val state = _state
@@ -39,19 +40,32 @@ class HomeViewModel(
         )
 
     private fun loadRepos(isInitial: Boolean = false, category: HomeCategory? = null) {
+        if (_state.value.isLoading || _state.value.isLoadingMore) {
+            Logger.d { "Already loading, skipping..." }
+            return
+        }
+
         currentJob?.cancel()
 
         if (isInitial) {
-            currentPage = 1
+            nextPageIndex = 1
         }
 
         val targetCategory = category ?: _state.value.currentCategory
+
+        Logger.d { "Loading repos: category=$targetCategory, page=$nextPageIndex, isInitial=$isInitial" }
 
         currentJob = viewModelScope.launch {
             val token = tokenDataSource.current()
 
             if (token == null) {
-                _state.update { it.copy(needsAuth = true, isLoading = false, isLoadingMore = false) }
+                _state.update {
+                    it.copy(
+                        needsAuth = true,
+                        isLoading = false,
+                        isLoadingMore = false
+                    )
+                }
                 return@launch
             }
 
@@ -68,46 +82,49 @@ class HomeViewModel(
 
             try {
                 val flow = when (targetCategory) {
-                    HomeCategory.POPULAR -> homeRepository.getTrendingRepositories(currentPage)
-                    HomeCategory.LATEST_UPDATED -> homeRepository.getLatestUpdated(currentPage)
-                    HomeCategory.NEW -> homeRepository.getNew(currentPage)
+                    HomeCategory.POPULAR -> homeRepository.getTrendingRepositories(nextPageIndex)
+                    HomeCategory.LATEST_UPDATED -> homeRepository.getLatestUpdated(nextPageIndex)
+                    HomeCategory.NEW -> homeRepository.getNew(nextPageIndex)
                 }
 
                 flow.collect { paginatedRepos ->
-                    Logger.d("Home viewmodel") {
-                        "Loaded repos count=${paginatedRepos.repos.size}, hasMore=${paginatedRepos.hasMore}"
-                    }
+                    Logger.d { "Received ${paginatedRepos.repos.size} repos, hasMore=${paginatedRepos.hasMore}, nextPage=${paginatedRepos.nextPageIndex}" }
+
+                    this@HomeViewModel.nextPageIndex = paginatedRepos.nextPageIndex
 
                     _state.update { currentState ->
-                        val updatedRepos = if (isInitial) {
-                            paginatedRepos.repos
-                        } else {
-                            currentState.repos + paginatedRepos.repos
-                        }
+                        val rawList = currentState.repos + paginatedRepos.repos
+                        val uniqueList = rawList.distinctBy { it.fullName }
 
                         currentState.copy(
-                            repos = updatedRepos,
+                            repos = uniqueList,
                             isLoading = false,
                             isLoadingMore = false,
                             hasMorePages = paginatedRepos.hasMore,
+                            errorMessage = if (uniqueList.isEmpty() && !paginatedRepos.hasMore) {
+                                "No repositories found"
+                            } else null
                         )
                     }
                 }
 
-            } catch (t: Throwable) {
-                Logger.w("Home viewmodel", t) { "Failed to load repos" }
+                Logger.d { "Flow completed" }
+                _state.update {
+                    it.copy(isLoading = false, isLoadingMore = false)
+                }
 
+            } catch (t: Throwable) {
                 if (t is CancellationException) {
+                    Logger.d { "Load cancelled (expected)" }
                     throw t
                 }
 
-                Logger.w("Home viewmodel", t) { "Failed" }
-
+                Logger.e { "Load failed: ${t.message}" }
                 _state.update {
                     it.copy(
                         isLoading = false,
                         isLoadingMore = false,
-                        errorMessage = t.message ?: "Failed to load data"
+                        errorMessage = t.message ?: "Failed to load repositories"
                     )
                 }
             }
@@ -117,26 +134,36 @@ class HomeViewModel(
     fun onAction(action: HomeAction) {
         when (action) {
             HomeAction.Refresh -> {
-                currentPage = 1
+                nextPageIndex = 1
                 loadRepos(isInitial = true)
             }
 
             HomeAction.Retry -> {
+                nextPageIndex = 1
                 loadRepos(isInitial = true)
             }
 
             HomeAction.LoadMore -> {
-                if (currentJob?.isActive == true) return
+                Logger.d { "LoadMore action: isLoading=${_state.value.isLoading}, isLoadingMore=${_state.value.isLoadingMore}, hasMore=${_state.value.hasMorePages}" }
 
-                if (!_state.value.isLoadingMore && _state.value.hasMorePages) {
-                    currentPage++
+                if (!_state.value.isLoadingMore && !_state.value.isLoading && _state.value.hasMorePages) {
                     loadRepos(isInitial = false)
                 }
             }
 
             is HomeAction.SwitchCategory -> {
-                currentPage = 1
-                loadRepos(isInitial = true, category = action.category)
+                if (_state.value.currentCategory != action.category) {
+                    nextPageIndex = 1
+                    loadRepos(isInitial = true, category = action.category)
+                }
+            }
+
+            is HomeAction.OnRepositoryClick -> {
+                /* Handled in composable */
+            }
+
+            HomeAction.OnSearchClick -> {
+                /* Handled in composable */
             }
         }
     }
