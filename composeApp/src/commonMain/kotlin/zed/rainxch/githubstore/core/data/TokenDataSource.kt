@@ -6,8 +6,8 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import zed.rainxch.githubstore.feature.auth.data.DeviceTokenSuccess
 import zed.rainxch.githubstore.feature.auth.data.DefaultTokenStore
+import zed.rainxch.githubstore.feature.auth.data.DeviceTokenSuccess
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -41,7 +41,8 @@ class DefaultTokenDataSource(
 
     init {
         scope.launch {
-            _flow.value = DefaultTokenStore.load()
+            val token = DefaultTokenStore.load()
+            _flow.value = token  // Now this WILL emit because it changes from LOADING_SENTINEL to null
             isInitialized.store(true)
         }
     }
