@@ -4,5 +4,4 @@ data class RepoStats(
     val stars: Int,
     val forks: Int,
     val openIssues: Int,
-    val contributors: Int
 )

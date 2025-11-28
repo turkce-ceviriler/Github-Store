@@ -3,6 +3,7 @@ package zed.rainxch.githubstore.feature.details.presentation
 import zed.rainxch.githubstore.core.domain.model.GithubRepoSummary
 import zed.rainxch.githubstore.core.domain.model.GithubRelease
 import zed.rainxch.githubstore.core.domain.model.GithubAsset
+import zed.rainxch.githubstore.core.domain.model.GithubUserProfile
 import zed.rainxch.githubstore.feature.details.domain.model.RepoStats
 
 data class DetailsState(
@@ -13,6 +14,7 @@ data class DetailsState(
     val latestRelease: GithubRelease? = null,
     val installableAssets: List<GithubAsset> = emptyList(),
     val primaryAsset: GithubAsset? = null,
+    val userProfile: GithubUserProfile? = null,
 
     val stats: RepoStats? = null,
     val readmeMarkdown: String? = null,

@@ -86,9 +86,19 @@ class DetailsViewModel(
                     }
                 }
 
+                val userProfileDeferred = async {
+                    try {
+                        detailsRepository.getUserProfile(owner)
+                    } catch (t: Throwable) {
+                        Logger.w { "Failed to load user profile: ${t.message}" }
+                        null
+                    }
+                }
+
                 val latestRelease = latestReleaseDeferred.await()
                 val stats = statsDeferred.await()
                 val readme = readmeDeferred.await()
+                val userProfile = userProfileDeferred.await()
 
                 val platformType = getPlatform().type
                 val installable = latestRelease?.assets?.filter { asset ->
@@ -105,7 +115,8 @@ class DetailsViewModel(
                     stats = stats,
                     readmeMarkdown = readme,
                     installableAssets = installable,
-                    primaryAsset = primary
+                    primaryAsset = primary,
+                    userProfile = userProfile
                 )
             } catch (t: Throwable) {
                 Logger.e { "Details load failed: ${t.message}" }
@@ -192,10 +203,12 @@ class DetailsViewModel(
             }
 
             DetailsAction.OpenAuthorInBrowser -> {
-                _state.value.latestRelease?.author?.htmlUrl?.let { openBrowser(it) }
+                _state.value.userProfile?.htmlUrl?.let { openBrowser(it) }
             }
 
             DetailsAction.OnNavigateBackClick -> { /* handled in UI host */ }
+
+            is DetailsAction.OpenAuthorInApp -> { /* handled in UI host */ }
         }
     }
 

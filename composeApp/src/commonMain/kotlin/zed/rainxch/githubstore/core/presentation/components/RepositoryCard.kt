@@ -155,7 +155,7 @@ fun RepositoryCardPreview() {
                 id = 0L,
                 name = "Hello",
                 fullName = "JIFEOJEF",
-                owner = GithubUser(login = "Skydoves", avatarUrl = "ewfew", htmlUrl = "grgrre"),
+                owner = GithubUser(id = 0L, login = "Skydoves", avatarUrl = "ewfew", htmlUrl = "grgrre"),
                 description = "Hello wolrd Hello wolrd Hello wolrd Hello wolrd Hello wolrd",
                 htmlUrl = "",
                 stargazersCount = 20,

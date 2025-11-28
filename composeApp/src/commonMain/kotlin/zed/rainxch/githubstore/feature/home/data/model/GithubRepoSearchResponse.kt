@@ -29,6 +29,7 @@ data class GithubRepoNetworkModel(
 
 @Serializable
 data class GithubOwnerNetworkModel(
+    val id: Long,
     val login: String,
     @SerialName("avatar_url") val avatarUrl: String,
     @SerialName("html_url") val htmlUrl: String
@@ -39,6 +40,7 @@ fun GithubRepoNetworkModel.toSummary(): GithubRepoSummary = GithubRepoSummary(
     name = name,
     fullName = fullName,
     owner = GithubUser(
+        id = owner.id,
         login = owner.login,
         avatarUrl = owner.avatarUrl,
         htmlUrl = owner.htmlUrl

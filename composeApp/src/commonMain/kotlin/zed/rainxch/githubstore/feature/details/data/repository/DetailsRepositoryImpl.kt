@@ -12,6 +12,7 @@ import zed.rainxch.githubstore.core.domain.model.GithubAsset
 import zed.rainxch.githubstore.core.domain.model.GithubRelease
 import zed.rainxch.githubstore.core.domain.model.GithubRepoSummary
 import zed.rainxch.githubstore.core.domain.model.GithubUser
+import zed.rainxch.githubstore.core.domain.model.GithubUserProfile
 import zed.rainxch.githubstore.feature.details.domain.model.RepoStats
 import zed.rainxch.githubstore.feature.details.domain.repository.DetailsRepository
 
@@ -29,6 +30,7 @@ class DetailsRepositoryImpl(
             name = repo.name,
             fullName = repo.fullName,
             owner = GithubUser(
+                id = repo.owner.id,
                 login = repo.owner.login,
                 avatarUrl = repo.owner.avatarUrl,
                 htmlUrl = repo.owner.htmlUrl
@@ -57,15 +59,17 @@ class DetailsRepositoryImpl(
             .firstOrNull()
             ?: return null
 
-        return latest.toDomain()
+        return latest.toDomain(owner, repo)
     }
 
     override suspend fun getReadme(owner: String, repo: String): String? {
         return try {
-            github.get("https://raw.githubusercontent.com/$owner/$repo/master/README.md").body()
+            val rawMarkdown = github.get("https://raw.githubusercontent.com/$owner/$repo/master/README.md").body<String>()
+            preprocessMarkdown(rawMarkdown, "https://raw.githubusercontent.com/$owner/$repo/master/")
         } catch (t: Throwable) {
             try {
-                github.get("https://raw.githubusercontent.com/$owner/$repo/main/README.md").body()
+                val rawMarkdown = github.get("https://raw.githubusercontent.com/$owner/$repo/main/README.md").body<String>()
+                preprocessMarkdown(rawMarkdown, "https://raw.githubusercontent.com/$owner/$repo/main/")
             } catch (e: Throwable) {
                 null
             }
@@ -77,34 +81,53 @@ class DetailsRepositoryImpl(
             header(HttpHeaders.Accept, "application/vnd.github+json")
         }.body()
 
-        // Infer contributors count using Link header trick with per_page=1
-        val contributorsCount = try {
-            val response = github.get("/repos/$owner/$repo/contributors") {
-                header(HttpHeaders.Accept, "application/vnd.github+json")
-                parameter("per_page", 1)
-                parameter("anon", 1)
-            }
-            val link = response.headers["Link"]
-            if (link != null && link.contains("rel=\"last\"")) {
-                // Example: <https://api.github.com/...&page=34>; rel="last"
-                val lastPart = link.split(',').firstOrNull { it.contains("rel=\"last\"") }
-                val pageParam = lastPart?.substringAfter("page=")?.substringBefore('>')
-                pageParam?.toIntOrNull() ?: 0
-            } else {
-                // If no Link header, either 0 or 1 contributors
-                1
-            }
-        } catch (_: Throwable) { 0 }
-
         return RepoStats(
             stars = info.stars,
             forks = info.forks,
             openIssues = info.openIssues,
-            contributors = contributorsCount
         )
     }
 
-    // Network models
+    override suspend fun getUserProfile(username: String): GithubUserProfile {
+        val user: UserProfileNetwork = github.get("/users/$username") {
+            header(HttpHeaders.Accept, "application/vnd.github+json")
+        }.body()
+
+        return GithubUserProfile(
+            id = user.id,
+            login = user.login,
+            name = user.name,
+            bio = user.bio,
+            avatarUrl = user.avatarUrl,
+            htmlUrl = user.htmlUrl,
+            followers = user.followers,
+            following = user.following,
+            publicRepos = user.publicRepos,
+            location = user.location,
+            company = user.company,
+            blog = user.blog,
+            twitterUsername = user.twitterUsername
+        )
+    }
+
+
+    @Serializable
+    private data class UserProfileNetwork(
+        val id: Long,
+        val login: String,
+        val name: String? = null,
+        val bio: String? = null,
+        @SerialName("avatar_url") val avatarUrl: String,
+        @SerialName("html_url") val htmlUrl: String,
+        val followers: Int,
+        val following: Int,
+        @SerialName("public_repos") val publicRepos: Int,
+        val location: String? = null,
+        val company: String? = null,
+        val blog: String? = null,
+        @SerialName("twitter_username") val twitterUsername: String? = null
+    )
+
     @Serializable
     private data class RepoByIdNetwork(
         val id: Long,
@@ -122,6 +145,7 @@ class DetailsRepositoryImpl(
 
     @Serializable
     private data class OwnerNetwork(
+        val id: Long,
         val login: String,
         @SerialName("avatar_url") val avatarUrl: String,
         @SerialName("html_url") val htmlUrl: String
@@ -152,6 +176,12 @@ class DetailsRepositoryImpl(
     )
 
     @Serializable
+    private data class ContributorStatsNetwork(
+        val total: Int? = null,
+        val author: OwnerNetwork? = null
+    )
+
+    @Serializable
     private data class AssetNetwork(
         val id: Long,
         val name: String,
@@ -161,29 +191,41 @@ class DetailsRepositoryImpl(
         val uploader: OwnerNetwork
     )
 
-    private fun ReleaseNetwork.toDomain(): GithubRelease = GithubRelease(
+    private fun ReleaseNetwork.toDomain(owner: String, repo: String): GithubRelease = GithubRelease(
         id = id,
         tagName = tagName,
         name = name,
         author = GithubUser(
+            id = author.id,
             login = author.login,
             avatarUrl = author.avatarUrl,
             htmlUrl = author.htmlUrl
         ),
         publishedAt = publishedAt ?: createdAt ?: "",
         description = body
-            // 1. Replace the <details> and <summary> tags
             ?.replace("<details>", "")
             ?.replace("</details>", "")
             ?.replace("<summary>", "")
             ?.replace("</summary>", "")
-            // 2. Remove the trailing \r\n (Carriage Return + Line Feed) which can sometimes cause issues
-            ?.replace("\r\n", "\n"),
+            ?.replace("\r\n", "\n")
+            ?.let { preprocessMarkdown(it, "https://raw.githubusercontent.com/$owner/$repo/main/") },
         assets = assets.map { it.toDomain() },
         tarballUrl = tarballUrl,
         zipballUrl = zipballUrl,
         htmlUrl = htmlUrl
     )
+
+    private fun preprocessMarkdown(markdown: String, baseUrl: String): String {
+        // Regex matches ![alt](relativePath) where relativePath doesn't start with https?://
+        return markdown.replace(Regex("!\\[([^\\]]*)\\]\\((?!https?://)([^)]+)\\)")) { match ->
+            val alt = match.groupValues[1]
+            var relativePath = match.groupValues[2].trim()
+            // Clean up common relative prefixes like ./ or /
+            if (relativePath.startsWith("./")) relativePath = relativePath.removePrefix("./")
+            if (relativePath.startsWith("/")) relativePath = relativePath.removePrefix("/")
+            "![$alt]($baseUrl$relativePath)"
+        }
+    }
 
     private fun AssetNetwork.toDomain(): GithubAsset = GithubAsset(
         id = id,
@@ -192,6 +234,7 @@ class DetailsRepositoryImpl(
         size = size,
         downloadUrl = downloadUrl,
         uploader = GithubUser(
+            id = uploader.id,
             login = uploader.login,
             avatarUrl = uploader.avatarUrl,
             htmlUrl = uploader.htmlUrl
