@@ -31,41 +31,41 @@ class AuthRepositoryImpl(
     override suspend fun awaitDeviceToken(start: DeviceStart): DeviceTokenSuccess =
         withContext(Dispatchers.Default) {
             val clientId = getGithubClientId()
-            val timeoutMs = start.expiresInSec * 1000L
-            var remainingMs = timeoutMs
+            val expirationTime = System.currentTimeMillis() + (start.expiresInSec * 1000L)
             var intervalMs = (start.intervalSec.coerceAtLeast(1)) * 1000L
-            var result: DeviceTokenSuccess? = null
-            while (result == null) {
-                if (remainingMs <= 0L) throw CancellationException("Device code expired")
+
+            while (true) {
+                // Check expiration based on actual time
+                if (System.currentTimeMillis() >= expirationTime) {
+                    throw CancellationException("Device code expired")
+                }
+
                 val res = GitHubAuthApi.pollDeviceToken(clientId, start.deviceCode)
                 val success = res.getOrNull()
+
                 if (success != null) {
                     tokenDataSource.save(success)
-                    result = success
-                    break
+                    return@withContext success
                 }
+
                 val msg = (res.exceptionOrNull()?.message ?: "").lowercase()
                 when {
                     "authorization_pending" in msg -> {
                         delay(intervalMs)
-                        remainingMs -= intervalMs
                     }
-
                     "slow_down" in msg -> {
                         intervalMs += 2000
                         delay(intervalMs)
-                        remainingMs -= intervalMs
                     }
-
                     "access_denied" in msg -> throw CancellationException("User denied access")
-                    "expired_token" in msg || "expired_device_code" in msg -> throw CancellationException(
-                        "Device code expired"
-                    )
-
-                    else -> error("Unexpected error: ${msg}")
+                    "expired_token" in msg || "expired_device_code" in msg ->
+                        throw CancellationException("Device code expired")
+                    else -> error("Unexpected error: $msg")
                 }
             }
-            result!!
+
+            @Suppress("UNREACHABLE_CODE")
+            error("Unreachable")  // This line will never execute but satisfies the compiler
         }
 
     override suspend fun logout() {

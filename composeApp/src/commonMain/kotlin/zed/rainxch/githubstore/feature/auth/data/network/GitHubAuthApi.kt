@@ -3,7 +3,9 @@ package zed.rainxch.githubstore.feature.auth.data.network
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.accept
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.post
@@ -21,11 +23,20 @@ import zed.rainxch.githubstore.core.domain.model.DeviceTokenError
 import zed.rainxch.githubstore.core.domain.model.DeviceTokenSuccess
 
 object GitHubAuthApi {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     val http by lazy {
         HttpClient {
             install(ContentNegotiation) { json(json) }
+
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 30_000
+            }
         }
     }
 
@@ -79,6 +90,11 @@ object GitHubAuthApi {
             accept(ContentType.Application.Json)
             headers.append(HttpHeaders.UserAgent, "GithubStore/1.0 (DeviceFlow)")
             contentType(ContentType.Application.FormUrlEncoded)
+
+            timeout {
+                socketTimeoutMillis = 60_000
+            }
+
             setBody(
                 FormDataContent(
                     Parameters.Companion.build {

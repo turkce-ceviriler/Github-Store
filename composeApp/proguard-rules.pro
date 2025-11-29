@@ -81,3 +81,44 @@
 -keepattributes Exceptions
 -keepattributes *Annotation*
 -keepattributes SourceFile,LineNumberTable
+
+# === START: Auth Fix ===
+-dontoptimize
+-keepattributes *Annotation*,Signature,Exception,InnerClasses,EnclosingMethod
+
+# Keep serialization infrastructure
+-keep class kotlinx.serialization.** { *; }
+-keep class **$$serializer { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class ** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Keep Ktor plugins
+-keep class io.ktor.client.plugins.** { *; }
+-keep class io.ktor.serialization.** { *; }
+
+# Keep your entire core package (narrow this down later)
+-keep class zed.rainxch.githubstore.core.** { *; }
+-keepclassmembers class zed.rainxch.githubstore.core.** { *; }
+# === END: Auth Fix ===
+
+-keep class zed.rainxch.githubstore.core.data.remote.dto.** { *; }
+-keep class zed.rainxch.githubstore.core.domain.model.auth.** { *; }
+
+# If your models are in different packages, list them:
+-keep class zed.rainxch.githubstore.**.*DeviceStart* { *; }
+-keep class zed.rainxch.githubstore.**.*DeviceToken* { *; }
+-keep class zed.rainxch.githubstore.**.*AuthConfig* { *; }
+
+# Keep the companion objects explicitly
+-keepclassmembers class zed.rainxch.githubstore.**.DeviceStart {
+    public static ** Companion;
+}
+-keepclassmembers class zed.rainxch.githubstore.**.DeviceTokenSuccess {
+    public static ** Companion;
+}
+-keepclassmembers class zed.rainxch.githubstore.**.DeviceTokenError {
+    public static ** Companion;
+}

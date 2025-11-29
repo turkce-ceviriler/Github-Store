@@ -17,7 +17,7 @@ data class DeviceStart(
 data class DeviceTokenSuccess(
     @SerialName("access_token") val accessToken: String,
     @SerialName("token_type") val tokenType: String,
-    val scope: String? = null,
+    @SerialName("scope") val scope: String? = null,
     @SerialName("expires_in") val expiresIn: Long? = null,
     @SerialName("refresh_token") val refreshToken: String? = null,
     @SerialName("refresh_token_expires_in") val refreshTokenExpiresIn: Long? = null
@@ -25,6 +25,6 @@ data class DeviceTokenSuccess(
 
 @Serializable
 data class DeviceTokenError(
-    val error: String,
+    @SerialName("error") val error: String,
     @SerialName("error_description") val errorDescription: String? = null
 )
