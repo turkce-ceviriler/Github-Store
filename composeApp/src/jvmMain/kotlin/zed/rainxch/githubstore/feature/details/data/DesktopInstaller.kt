@@ -36,12 +36,7 @@ class DesktopInstaller(
             PlatformType.WINDOWS -> name.endsWith(".msi") || name.endsWith(".exe")
             PlatformType.MACOS -> name.endsWith(".dmg") || name.endsWith(".pkg")
             PlatformType.LINUX -> {
-                when {
-                    name.endsWith(".appimage") -> true
-                    name.endsWith(".deb") -> linuxPackageType == LinuxPackageType.DEB
-                    name.endsWith(".rpm") -> linuxPackageType == LinuxPackageType.RPM
-                    else -> false
-                }
+                name.endsWith(".appimage") || name.endsWith(".deb") || name.endsWith(".rpm")
             }
         }
 
@@ -59,9 +54,9 @@ class DesktopInstaller(
             PlatformType.MACOS -> listOf(".dmg", ".pkg")
             PlatformType.LINUX -> {
                 when (linuxPackageType) {
-                    LinuxPackageType.DEB -> listOf(".deb", ".appimage")
-                    LinuxPackageType.RPM -> listOf(".rpm", ".appimage")
-                    LinuxPackageType.UNIVERSAL -> listOf(".appimage")
+                    LinuxPackageType.DEB -> listOf(".deb", ".appimage", ".rpm")
+                    LinuxPackageType.RPM -> listOf(".rpm", ".appimage", ".deb")
+                    LinuxPackageType.UNIVERSAL -> listOf(".appimage", ".deb", ".rpm")
                 }
             }
         }
