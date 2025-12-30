@@ -1,3 +1,6 @@
+import com.android.utils.CpuArchitecture
+import com.android.utils.jvmArchitecture
+import com.android.utils.osArchitecture
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
@@ -227,7 +230,7 @@ compose.desktop {
     application {
         mainClass = "zed.rainxch.githubstore.MainKt"
         nativeDistributions {
-            packageName = "github-store"
+            packageName = "GitHub-Store"
             packageVersion = appVersionName
             vendor = "rainxchzed"
             includeAllModules = true
