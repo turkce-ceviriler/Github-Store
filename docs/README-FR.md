@@ -69,7 +69,14 @@ qui transforme les GitHub Releases en une expérience fluide de type app store :
 > Vous pouvez l’autoriser via
 > System Settings → Privacy & Security → Open Anyway.
 
----
+## 🏆 Présenté dans
+
+<a href="https://www.youtube.com/@howtomen">
+  <img src="https://img.shields.io/badge/Featured%20by-HowToMen-red?logo=youtube" alt="Présenté par HowToMen">
+</a>
+
+- **HowToMen** : [Top 20 des meilleures applications Android de 2026 (860k abonnés)](https://www.youtube.com/watch?v=7favc9MDedQ)
+- **F-Droid** : [Classé n°1 dans la catégorie App Store](https://f-droid.org/en/categories/app-store-updater/)
 
 ## 🚀 Fonctionnalités
 
@@ -209,6 +216,28 @@ sans soumission manuelle.
 - **Toujours la dernière version**
 - **Expérience cohérente sur Android et Desktop**
 - **Open source et extensible**
+
+---
+
+## 💖 Soutenir ce projet
+
+GitHub Store est gratuit et le restera toujours.  
+Si ce projet vous aide, vous pouvez le soutenir ici :
+
+<a href="https://github.com/sponsors/rainxchzed">
+  <img src="https://img.shields.io/badge/Sponsor-GitHub-pink?logo=github" alt="Sponsoriser sur GitHub">
+</a>
+
+<a href="https://www.buymeacoffee.com/rainxchzed">
+  <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black" alt="Offrir un café">
+</a>
+
+Votre soutien permet :
+- La maintenance de l’application pour plus de 20 000 utilisateurs
+- Le développement de nouvelles fonctionnalités
+- La création de plus d’outils gratuits pour les développeurs
+
+Vous pouvez aussi laisser une ⭐ sur le dépôt et le partager !
 
 ---
 
