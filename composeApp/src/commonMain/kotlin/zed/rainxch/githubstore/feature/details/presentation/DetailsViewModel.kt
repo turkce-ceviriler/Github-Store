@@ -36,6 +36,7 @@ import zed.rainxch.githubstore.core.domain.repository.InstalledAppsRepository
 import zed.rainxch.githubstore.core.presentation.utils.BrowserHelper
 import zed.rainxch.githubstore.core.data.services.Downloader
 import zed.rainxch.githubstore.core.data.services.Installer
+import zed.rainxch.githubstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import zed.rainxch.githubstore.feature.details.domain.repository.DetailsRepository
 import zed.rainxch.githubstore.feature.details.presentation.model.LogResult
 import java.io.File
@@ -52,6 +53,7 @@ class DetailsViewModel(
     private val installedAppsRepository: InstalledAppsRepository,
     private val favoritesRepository: FavoritesRepository,
     private val packageMonitor: PackageMonitor,
+    private val syncInstalledAppsUseCase: SyncInstalledAppsUseCase
 ) : ViewModel() {
 
     private var hasLoadedInitialData = false
@@ -81,8 +83,10 @@ class DetailsViewModel(
             try {
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
-                // Sync system state first - handles cleanup and migration
-                syncSystemExistenceAndMigrate()
+                val syncResult = syncInstalledAppsUseCase()
+                if (syncResult.isFailure) {
+                    Logger.w { "Sync had issues but continuing: ${syncResult.exceptionOrNull()?.message}" }
+                }
 
                 val repo = detailsRepository.getRepositoryById(repositoryId.toLong())
                 val owner = repo.owner.login
@@ -132,14 +136,11 @@ class DetailsViewModel(
                     }
                 }
 
-                // SIMPLIFIED: Just load from DB after sync
                 val installedAppDeferred = async {
                     try {
                         val dbApp = installedAppsRepository.getAppByRepoId(repo.id)
 
-                        // After sync, we can trust the DB state
                         if (dbApp != null) {
-                            // Clear pending status if actually installed
                             if (dbApp.isPendingInstall &&
                                 packageMonitor.isPackageInstalled(dbApp.packageName)) {
                                 installedAppsRepository.updatePendingStatus(
@@ -228,7 +229,6 @@ class DetailsViewModel(
                         Logger.d { "App ${app.packageName} no longer installed, removing from DB" }
                         installedAppsRepository.deleteInstalledApp(app.packageName)
                     } else if (app.installedVersionName == null) {
-                        // Migration logic for apps missing version data
                         if (platform.type == PlatformType.ANDROID) {
                             val systemInfo = packageMonitor.getInstalledPackageInfo(app.packageName)
                             if (systemInfo != null) {
@@ -363,7 +363,7 @@ class DetailsViewModel(
             DetailsAction.CheckForUpdates -> {
                 viewModelScope.launch {
                     try {
-                        syncSystemExistenceAndMigrate()
+                        syncInstalledAppsUseCase()
 
                         val installedApp = _state.value.installedApp ?: return@launch
                         val hasUpdate =

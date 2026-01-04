@@ -37,6 +37,7 @@ import zed.rainxch.githubstore.core.data.services.Downloader
 import zed.rainxch.githubstore.core.data.services.Installer
 import zed.rainxch.githubstore.core.domain.Platform
 import zed.rainxch.githubstore.core.domain.model.PlatformType
+import zed.rainxch.githubstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import zed.rainxch.githubstore.feature.details.domain.repository.DetailsRepository
 import java.io.File
 
@@ -47,7 +48,8 @@ class AppsViewModel(
     private val installedAppsRepository: InstalledAppsRepository,
     private val packageMonitor: PackageMonitor,
     private val detailsRepository: DetailsRepository,
-    private val platform: Platform
+    private val platform: Platform,
+    private val syncInstalledAppsUseCase: SyncInstalledAppsUseCase
 ) : ViewModel() {
 
     private var hasLoadedInitialData = false
@@ -76,7 +78,11 @@ class AppsViewModel(
             _state.update { it.copy(isLoading = true) }
 
             try {
-                syncSystemExistenceAndMigrate()
+                // Sync system state using shared use case
+                val syncResult = syncInstalledAppsUseCase()
+                if (syncResult.isFailure) {
+                    Logger.w { "Sync had issues but continuing: ${syncResult.exceptionOrNull()?.message}" }
+                }
 
                 appsRepository.getApps().collect { apps ->
                     val appItems = apps.map { app ->
@@ -104,13 +110,12 @@ class AppsViewModel(
             } catch (e: Exception) {
                 Logger.e { "Failed to load apps: ${e.message}" }
                 _state.update {
-                    it.copy(
-                        isLoading = false,
-                    )
+                    it.copy(isLoading = false)
                 }
             }
         }
     }
+
 
     private suspend fun syncSystemExistenceAndMigrate() {
         withContext(Dispatchers.IO) {
@@ -164,7 +169,7 @@ class AppsViewModel(
     private fun checkAllForUpdates() {
         viewModelScope.launch {
             try {
-                syncSystemExistenceAndMigrate()
+                syncInstalledAppsUseCase()
 
                 installedAppsRepository.checkAllForUpdates()
             } catch (e: Exception) {
