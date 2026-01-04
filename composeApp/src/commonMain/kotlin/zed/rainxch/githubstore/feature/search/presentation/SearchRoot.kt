@@ -64,6 +64,7 @@ import githubstore.composeapp.generated.resources.results_found
 import githubstore.composeapp.generated.resources.retry
 import githubstore.composeapp.generated.resources.search_repositories_hint
 import githubstore.composeapp.generated.resources.sort_by
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
@@ -130,16 +131,25 @@ fun SearchScreen(
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val visibleItems = layoutInfo.visibleItemsInfo
+
+            if (totalItems == 0 ||
+                state.isLoadingMore ||
+                state.isLoading ||
+                !state.hasMorePages) {
+                return@derivedStateOf false
+            }
+
+            val lastVisibleItem = visibleItems.lastOrNull() ?: return@derivedStateOf false
+            val viewportEndOffset = layoutInfo.viewportEndOffset
+
+            val hasEmptySpaceAtBottom = lastVisibleItem.index == totalItems - 1 &&
+                    lastVisibleItem.offset.y + lastVisibleItem.size.height < viewportEndOffset
 
             val threshold = (totalItems * 0.8f).toInt()
+            val isNearEnd = lastVisibleItem.index >= threshold
 
-            totalItems > 0 &&
-                    lastVisibleItem != null &&
-                    lastVisibleItem.index >= threshold &&
-                    !state.isLoadingMore &&
-                    !state.isLoading &&
-                    state.hasMorePages
+            isNearEnd || hasEmptySpaceAtBottom
         }
     }
 
@@ -148,6 +158,27 @@ fun SearchScreen(
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             currentOnAction(SearchAction.LoadMore)
+        }
+    }
+
+    LaunchedEffect(listState.layoutInfo.totalItemsCount, listState.layoutInfo.viewportEndOffset) {
+        val layoutInfo = listState.layoutInfo
+        val visibleItems = layoutInfo.visibleItemsInfo
+        val lastVisible = visibleItems.lastOrNull()
+
+        if (lastVisible != null &&
+            layoutInfo.totalItemsCount > 0 &&
+            !state.isLoadingMore &&
+            !state.isLoading &&
+            state.hasMorePages) {
+
+            val hasEmptySpace = lastVisible.index == layoutInfo.totalItemsCount - 1 &&
+                    lastVisible.offset.y + lastVisible.size.height < layoutInfo.viewportEndOffset
+
+            if (hasEmptySpace) {
+                delay(100)
+                currentOnAction(SearchAction.LoadMore)
+            }
         }
     }
 
@@ -264,40 +295,6 @@ fun SearchScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
-                )
-            }
-
-            if (false) { // FOR NOW SORTING FEATURE IS NOT AVAILABLE
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .clickable {
-
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                ) {
-                    Text(
-                        text = stringResource(Res.string.sort_by) + ": ${state.selectedSortBy.displayText()}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Icon(
-                        imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.outline,
-                    )
-                }
-                SortByBottomSheet(
-                    sortByOptions = SortBy.entries.toList(),
-                    selectedSortBy = state.selectedSortBy,
-                    onSortBySelected = { chosen ->
-                        onAction(SearchAction.OnSortBySelected(chosen))
-                    },
-                    onDismissRequest = { }
                 )
             }
 
