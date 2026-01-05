@@ -251,6 +251,7 @@
     <string name="removed_from_favourites">Repository removed from favourites</string>
     <string name="add_to_favourites">Add to favourites</string>
     <string name="remove_from_favourites">Remove from favourites</string>
+    <string name="favourites">Favourites</string>
 
 
 </resources>

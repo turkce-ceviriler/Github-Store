@@ -198,5 +198,6 @@
     <string name="removed_from_favourites">リポジトリをお気に入りから削除しました</string>
     <string name="add_to_favourites">お気に入りに追加</string>
     <string name="remove_from_favourites">お気に入りから削除</string>
+    <string name="favourites">お気に入り</string>
 
 </resources>

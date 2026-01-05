@@ -199,5 +199,6 @@
     <string name="removed_from_favourites">已从收藏中移除</string>
     <string name="add_to_favourites">添加到收藏</string>
     <string name="remove_from_favourites">从收藏中移除</string>
+    <string name="favourites">收藏</string>
 
 </resources>

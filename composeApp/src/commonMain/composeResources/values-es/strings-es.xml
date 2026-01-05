@@ -198,5 +198,6 @@
     <string name="removed_from_favourites">Repositorio eliminado de favoritos</string>
     <string name="add_to_favourites">Añadir a favoritos</string>
     <string name="remove_from_favourites">Quitar de favoritos</string>
+    <string name="favourites">Favoritos</string>
 
 </resources>
