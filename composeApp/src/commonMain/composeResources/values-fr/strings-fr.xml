@@ -196,5 +196,7 @@
 
     <string name="added_to_favourites">Dépôt ajouté aux favoris</string>
     <string name="removed_from_favourites">Dépôt supprimé des favoris</string>
+    <string name="add_to_favourites">Ajouter aux favoris</string>
+    <string name="remove_from_favourites">Retirer des favoris</string>
 
 </resources>

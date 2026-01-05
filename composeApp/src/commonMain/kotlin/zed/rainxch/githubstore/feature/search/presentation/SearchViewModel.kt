@@ -147,6 +147,7 @@ class SearchViewModel(
                                     mergedMap[r.repository.id] = existing.copy(
                                         isInstalled = r.isInstalled,
                                         isUpdateAvailable = r.isUpdateAvailable,
+                                        isFavourite = r.isFavourite,
                                         repository = r.repository
                                     )
                                 }
