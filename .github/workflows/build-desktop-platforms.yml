@@ -192,6 +192,7 @@ jobs:
           }
 
           retry ./gradlew :composeApp:packageDeb :composeApp:packageRpm --no-daemon --parallel
+        shell: bash
 
       - name: Upload Linux installers
         uses: actions/upload-artifact@v4
