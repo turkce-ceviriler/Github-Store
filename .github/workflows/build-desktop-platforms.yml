@@ -90,7 +90,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          java-package: 'jdk'
           cache: 'gradle'
 
       - name: Setup Gradle
@@ -140,15 +139,8 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    container:
-      image: debian:12
 
     steps:
-      - name: Install build dependencies
-        run: |
-          apt-get update
-          apt-get install -y curl git wget fakeroot rpm libasound2 libpng16-16 libfontconfig1 libfreetype6 libglib2.0-0 libgtk-3-0
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -182,7 +174,6 @@ jobs:
               fi
               if [ $n -ge $max ]; then
                 echo "Command failed after $n attempts."
-                find composeApp/build/compose/logs/createRuntimeImage -type f -print -exec cat {} \;
                 return 1
               fi
               n=$((n+1))
