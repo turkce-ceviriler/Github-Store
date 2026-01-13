@@ -164,7 +164,7 @@
     <string name="update_app">Uygulamayı güncelle</string>
 
     <!-- Download stages -->
-    <string name="downloading">Yükleniyor</string>
+    <string name="downloading">İndiriliyor</string>
     <string name="updating">Güncelleniyor</string>
     <string name="verifying">Doğrulanıyor</string>
     <string name="installing">Yükleniyor</string>
@@ -271,7 +271,7 @@
     <string name="last_synced">Son eşitleme</string>
     <string name="just_now">Şimdi</string>
     <string name="minutes_ago">%d dakika önce</string>
-    <string name="hours_ago">%s saat önce</string>
+    <string name="hours_ago">%d saat önce</string>
     <string name="days_ago">%d gün önce</string>
     <string name="dismiss">Kapat</string>
     <string name="sync_starred_failed">Yıldızlı repoları eşitlerken hata</string>
