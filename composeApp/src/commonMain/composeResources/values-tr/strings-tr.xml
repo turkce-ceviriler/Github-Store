@@ -32,7 +32,7 @@
     <string name="error_with_message">Hata: %1$s</string>
 
     <!-- Apps feature - Update all progress -->
-    <string name="updating_x_of_y">%2$d içindenn %1$d güncelleniyor</string>
+    <string name="updating_x_of_y">%2$d içinden %1$d güncelleniyor</string>
     <string name="currently_updating">Şu anda: %1$s</string>
 
 
@@ -46,7 +46,7 @@
     <string name="auth_error_with_message">Hata: %1$s</string>
 
     <!-- Device flow -->
-    <string name="enter_code_on_github">Başarıyla güncellendi</string>
+    <string name="enter_code_on_github">Kodu GitHub'da gir</string>
     <string name="copy_code">Kodu kopyala</string>
     <string name="open_github">Github'ı aç</string>
 
